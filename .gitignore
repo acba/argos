@@ -1,1 +1,6 @@
+__pycache__/
 venv/
+*.pkl
+inspect_pkl.py
+*.svg
+*.pyc

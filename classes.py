@@ -142,6 +142,10 @@ class AcaoVerificacao:
             print(f'\tResultado da verificação: {acao.resultado}')
             print(f'')
 
+        # Otimização: Remove a referência ao DataFrame após a execução para reduzir o uso de memória.
+        if hasattr(acao.fonte_informacao, 'info'):
+            acao.fonte_informacao.info = None
+
         return acao
 
 class ProcedimentoAuditoria:
