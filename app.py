@@ -5,6 +5,7 @@ import os
 import io
 import pickle
 import zipfile
+from docxtpl import DocxTemplate, RichText, InlineImage
 
 from classes import FonteInformacao, Achado, AcaoVerificacao, ProcedimentoAuditoria, Auditado, \
     gerar_tabela_encaminhamentos, gerar_tabela_achados, gerar_tabela_situacoes_inconformes
@@ -293,7 +294,6 @@ elif page == "2. Visualizar resultado de auditoria": # Início da nova página
                 if all_encaminhamentos_texto:
                     # Ordena os valores para garantir que o gráfico seja exibido do maior para o menor
                     encaminhamentos_counts = pd.Series(all_encaminhamentos_texto).value_counts().nlargest(10).sort_values(ascending=False)
-                    print(encaminhamentos_counts)
                     st.bar_chart(encaminhamentos_counts, sort=False)
                 else:
                     st.info("Nenhum encaminhamento proposto.")
@@ -384,6 +384,8 @@ elif page == "2. Visualizar resultado de auditoria": # Início da nova página
             mime="application/zip",
             key="download_zip"
         )
+    else:
+        st.info("Por favor, carregue e processe os arquivos da auditoria antes de visualizar os resultados.")
 
 
 elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
@@ -391,63 +393,35 @@ elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
     st.info("Funcionalidade para gerar relatórios consolidados a ser implementada.")
     st.write("Esta seção permitirá a geração de relatórios personalizados a partir dos dados de auditoria processados.")
 
+    if st.session_state.audit_completed:
+        results = st.session_state.audit_results
 
-    for auditado in auditados.values():
-        orgao = auditado.sigla
-        print(f'Gerando relatório para {orgao}')
+        if st.button("Gerar relatórios"):
+            contexto_anexo_evidencias = []
+            for auditado in results["auditados"].values():
+                contexto_anexo_evidencias.append({
+                    'sigla_orgao': auditado.sigla,
+                    'nome_orgao': auditado.nome,
+                    'achados': list(auditado.get_achados().values()),
+                })
 
-        base = DocxTemplate("docs/relatorio-preliminar-individual-base.docx")
-        filename = f"{orgao.strip()} - Relatório Individual".replace('/', '-')
+            base = DocxTemplate("docs/anexo-evidencias-base.docx")
+            filename = f"ANXX - Evidências".replace('/', '-')
+            contexto = {'dados': contexto_anexo_evidencias}
+            base.render(contexto)
 
-        print(f'Gerando para {orgao}')
+            bio = io.BytesIO()
+            base.save(bio)
+            docx_bytes = bio.getvalue()
+            st.session_state.download_files['relatorio_evidencias'] = docx_bytes
 
-        contexto = {
-            'sigla_orgao': auditado.sigla,
-            'nome_orgao': auditado.nome,
-            'nome_orgao_maiusculo': auditado.nome.upper(),
-            'nota_imhc': '{:,.2f}'.format(df_imhc.loc[orgao]['iMHC_parcial']),
-            'nivel_maturidade': df_imhc.loc[orgao]['iMHC_parcial_maturidade']
-        }
-
-        #
-        # Seção Ajustes das respostas
-        #
-        # contexto = contexto | secao_ajustes(orgao)
-
-        #
-        # Seção Passos
-        #
-        # contexto = contexto | secao_passos(orgao)
-
-        #
-        # Seção dos Achados
-        #
-        # achados = resultado_achados[orgao] if orgao in resultado_achados else {}
-        # contexto['achados'] = achados
-        # contexto['tem_achados'] = True if len(contexto['achados']) > 0 else False
-
-        # print(f'Achados encontrados ({len(list(achados.keys()))}):')
-        # print(list(achados.keys()))
-
-        #
-        # Secao da Avaliação
-        #
-        # contexto = contexto | secao_graficos(orgao)
-        #print(contexto)
-
-        #
-        # Situações Encontradas
-        #
-        # contexto = contexto | secao_situacoes_encontradas(orgao)
-
-        #
-        # Seção Plano de Ação
-        #
-        # contexto = contexto | secao_plano_acao(orgao)
-
-        base.render(contexto)
-        base.save(f'docs/relatorios-individuais/{filename}.docx')
-        # convert(f'docs/relatorios-individuais/{filename}.docx', f'docs/relatorios-individuais/{filename}.pdf')
-
-        # shutil.rmtree('docs/tmp', ignore_errors=True)
-        break
+        if 'relatorio_evidencias' in st.session_state.download_files:
+            st.download_button(
+                label="Baixar Anexo de Evidências",
+                data=st.session_state.download_files['relatorio_evidencias'],
+                file_name=f"ANXX - Evidências.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="download_relatorio_evidencias"
+            )
+    else:
+        st.info("Por favor, carregue e processe os arquivos da auditoria antes de gerar relatórios.")
