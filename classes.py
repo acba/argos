@@ -408,7 +408,7 @@ class Auditado:
             Cria um documento .docx em memória com os dados do objeto Auditado, usando um template.
         """
         # Carregar o documento template
-        doc = Document('template_report.docx')
+        doc = Document('docs/template_report.docx')
 
         # Título do relatório
         doc.add_heading(f"{self.sigla} - {self.nome}", level=1)
