@@ -28,10 +28,16 @@ if 'download_files' not in st.session_state:
     st.session_state.download_files = {}
 
 st.sidebar.title("Argos - Auditoria Simplificada")
-page = st.sidebar.radio("Navegação", ["Aplicar Procedimentos de Auditoria", "Carregar resultado de auditoria", "Gerar Relatórios"])
 
-if page == "Aplicar Procedimentos de Auditoria": # Início da página "Aplicar Procedimentos de Auditoria"
-    st.title("Aplicar Procedimentos de Auditoria")
+page = st.sidebar.radio("Navegação", [
+    "1. Aplicar Procedimentos de Auditoria",
+    "1. Carregar resultado de auditoria",
+    "2. Visualizar resultado de auditoria",
+    "3. Gerar Relatórios"
+])
+
+if page == "1. Aplicar Procedimentos de Auditoria": # Início da página "Aplicar Procedimentos de Auditoria"
+    st.title("1. Aplicar Procedimentos de Auditoria")
     st.write("Esta seção realiza a aplicação dos procedimentos de auditoria definidos no mapa de verificação de achados. O processo gera como saída o objeto no modelo de dados do Audita, planilhas apresentando relação achados, encaminhamentos e situações encontrados por auditado, e relatórios individuais da aplicação dos procedimentos nos auditados.")
 
     with st.expander("Modelo de Dados do Audita"):
@@ -43,8 +49,10 @@ if page == "Aplicar Procedimentos de Auditoria": # Início da página "Aplicar P
         arquivo_mapa_achados  = st.file_uploader("Mapa de Verificação e Achados (ex: mapa-verificacao-achados.xlsx)", type=["xlsx"])
         arquivos_fontes_dados = st.file_uploader("Fontes de Informação (arquivos .xlsx)", type=["xlsx"], accept_multiple_files=True)
 
-    # 2. Processamento dos dados
+        if not arquivo_auditados or not arquivo_mapa_achados or not arquivos_fontes_dados:
+            st.info("Por favor, carregue todos os arquivos Excel de entrada.")
 
+    # 2. Processamento dos dados
     if arquivo_auditados and arquivo_mapa_achados and arquivos_fontes_dados:
         if st.button("Processar arquivos e gerar achados"):
             # st.header("2. Processando Dados e Gerando Resultados")
@@ -159,7 +167,7 @@ if page == "Aplicar Procedimentos de Auditoria": # Início da página "Aplicar P
                     with st.spinner("Executando procedimentos de auditoria... Por favor, aguarde."):
                         # Execução da auditoria
                         for auditado in auditados.values():
-                            auditado.aplicar_procedimentos(procedimentos.values(), debug=False)
+                            auditado.aplicar_procedimentos(procedimentos.values(), debug=True)
 
                         # Geração das tabelas
                         tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados, procedimentos)
@@ -177,21 +185,141 @@ if page == "Aplicar Procedimentos de Auditoria": # Início da página "Aplicar P
 
             except Exception as e:
                 st.error(f"Ocorreu um erro durante o processamento: {e}")
-    else:
-        st.info("Por favor, carregue todos os arquivos Excel de entrada.")
+    # else:
+    #     st.info("Por favor, carregue todos os arquivos Excel de entrada.")
+
+    if st.session_state.audit_completed:
+        st.success("Auditoria já concluída, pode ir para tela de visualização de resultados ou geração de relatórios!")
+
+elif page == "1. Carregar resultado de auditoria": # Início da nova página
+    st.title("Carregar Resultado de Auditoria")
+    st.write("Esta seção permite carregar um resultado de auditoria previamente salvo (arquivo .pkl) para visualizar e baixar os resultados sem a necessidade de reprocessar os arquivos de entrada.")
+
+    arquivo_resultado = st.file_uploader("Carregar arquivo de resultado da auditoria (.pkl)", type=["pkl"])
+
+    if arquivo_resultado:
+        if st.button("Carregar e exibir resultados"):
+            try:
+                with st.spinner("Carregando e processando resultado..."):
+                    # Carrega o objeto 'auditados' do arquivo pkl
+                    auditados = pickle.load(arquivo_resultado)
+
+                    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
+                    procedimentos = {}
+                    # Pega os procedimentos aplicados em qualquer um:
+                    for p in list(auditados.values())[0].procedimentos_executados:
+                        procedimentos[p.id] = p
+
+                    # Gera novamente as tabelas a partir dos dados carregados
+                    tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados, procedimentos)
+                    tabela_achados = gerar_tabela_achados(auditados, procedimentos)
+                    tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados, procedimentos)
+
+                    # Atualiza o estado da sessão para refletir os dados carregados
+                    st.session_state.audit_results = {
+                        "auditados": auditados,
+                        "tabela_encaminhamentos": tabela_encaminhamentos,
+                        "tabela_achados": tabela_achados,
+                        "tabela_situacoes": tabela_situacoes,
+                    }
+                    st.session_state.audit_completed = True
+                    st.session_state.files_processed = True # Marca como processado para consistência
+                    st.session_state.download_files = {} # Limpa arquivos de download antigos
+
+                    st.success("Resultado da auditoria carregado com sucesso!")
+                    # st.rerun() # Força o recarregamento para exibir os resultados
+            except Exception as e:
+                st.error(f"Ocorreu um erro ao carregar o arquivo: {e}")
+
+    if st.session_state.audit_completed:
+        st.success("Auditoria já concluída ou carregada, pode ir para tela de visualização de resultados ou geração de relatórios!")
+
+
+elif page == "2. Visualizar resultado de auditoria": # Início da nova página
+    st.title("Visualizar Resultado de Auditoria")
+    st.write("Esta seção permite visualizar e baixar os resultados de auditoria já processada.")
 
     if st.session_state.audit_completed:
         results = st.session_state.audit_results
 
         # 3. Geração das saídas (tabelas, relatórios, etc.)
-        st.header("Resultados Gerados", divider="gray")
+        st.header("Resultados Gerados")
 
-        with st.expander("Visualizar Tabelas de Resultados"):
-            st.subheader("Encaminhamentos por Auditado")
-            st.dataframe(results["tabela_encaminhamentos"])
+        # Usando abas para organizar melhor a visualização
+        tab_graficos, tab_tabelas = st.tabs(["📊 Visualizar Gráficos", "📄 Visualizar Tabelas"])
 
+        with tab_graficos:
+            st.subheader("Quantitativo de Auditados por Achado")
+            df_achados = results["tabela_achados"]
+            achados_counts = (df_achados == 'X').sum().sort_values(ascending=True)
+            st.bar_chart(achados_counts, horizontal=True)
+
+            # Coleta de dados para os gráficos seguintes
+            all_situations = []
+            all_encaminhamentos_texto = []
+            all_encaminhamentos_tipo = []
+            situations_per_auditado = {}
+            achados_per_auditado = {}
+
+            for sigla, auditado in results["auditados"].items():
+                if auditado.foi_auditado:
+                    # Coleta de situações
+                    situacoes = auditado.get_situacoes_inconformes()
+                    all_situations.extend(situacoes)
+                    situations_per_auditado[sigla] = len(situacoes)
+
+                    # Coleta de achados
+                    achados_per_auditado[sigla] = len(auditado.get_nomes_achados())
+
+                    # Coleta de encaminhamentos (texto e tipo)
+                    for p in auditado.procedimentos_executados:
+                        if p.achado:
+                            for e in p.achado.encaminhamentos:
+                                all_encaminhamentos_texto.append(e['encaminhamento'].strip())
+                                all_encaminhamentos_tipo.append(e['tipo'].strip())
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader("Distribuição por Tipo de Encaminhamento")
+                if all_encaminhamentos_tipo:
+                    tipo_counts = pd.Series(all_encaminhamentos_tipo).value_counts()
+                    st.bar_chart(tipo_counts) # Gráfico de pizza é melhor, mas bar_chart é nativo e eficaz
+                else:
+                    st.info("Nenhum encaminhamento proposto.")
+
+            with col2:
+                st.subheader("Top 10 Encaminhamentos Mais Propostos")
+                if all_encaminhamentos_texto:
+                    # Ordena os valores para garantir que o gráfico seja exibido do maior para o menor
+                    encaminhamentos_counts = pd.Series(all_encaminhamentos_texto).value_counts().nlargest(10).sort_values(ascending=False)
+                    print(encaminhamentos_counts)
+                    st.bar_chart(encaminhamentos_counts, sort=False)
+                else:
+                    st.info("Nenhum encaminhamento proposto.")
+
+            st.subheader("Top 10 Situações Inconformes Mais Recorrentes")
+            if all_situations:
+                # Ordena os valores para garantir que o gráfico seja exibido do maior para o menor
+                situations_counts = pd.Series(all_situations).value_counts().nlargest(10).sort_values(ascending=False)
+                st.bar_chart(situations_counts, sort=False)
+            else:
+                st.info("Nenhuma situação inconforme encontrada.")
+
+            st.subheader("Ranking de Auditados")
+            if situations_per_auditado and achados_per_auditado:
+                df_rank_situacoes = pd.DataFrame.from_dict(situations_per_auditado, orient='index', columns=['Qtd. Situações Inconformes'])
+                df_rank_achados = pd.DataFrame.from_dict(achados_per_auditado, orient='index', columns=['Qtd. Achados Distintos'])
+                df_rank_combined = df_rank_achados.join(df_rank_situacoes)
+                df_rank_combined = df_rank_combined.sort_values(by=['Qtd. Achados Distintos', 'Qtd. Situações Inconformes'], ascending=False)
+                st.dataframe(df_rank_combined)
+
+        with tab_tabelas:
             st.subheader("Achados por Auditado")
             st.dataframe(results["tabela_achados"])
+
+            st.subheader("Encaminhamentos por Auditado")
+            st.dataframe(results["tabela_encaminhamentos"])
 
             st.subheader("Situações Inconformes por Auditado")
             st.dataframe(results["tabela_situacoes"])
@@ -257,47 +385,69 @@ if page == "Aplicar Procedimentos de Auditoria": # Início da página "Aplicar P
             key="download_zip"
         )
 
-elif page == "Carregar resultado de auditoria": # Início da nova página
-    st.title("Carregar Resultado de Auditoria")
-    st.write("Esta seção permite carregar um resultado de auditoria previamente salvo (arquivo .pkl) para visualizar e baixar os resultados sem a necessidade de reprocessar os arquivos de entrada.")
 
-    arquivo_resultado = st.file_uploader("Carregar arquivo de resultado da auditoria (.pkl)", type=["pkl"])
-
-    if arquivo_resultado:
-        if st.button("Carregar e exibir resultados"):
-            try:
-                with st.spinner("Carregando e processando resultado..."):
-                    # Carrega o objeto 'auditados' do arquivo pkl
-                    auditados = pickle.load(arquivo_resultado)
-
-                    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
-                    procedimentos = {}
-                    for auditado in auditados.values():
-                        for achado in auditado.achados:
-                            if achado.procedimento.id not in procedimentos:
-                                procedimentos[achado.procedimento.id] = achado.procedimento
-
-                    # Gera novamente as tabelas a partir dos dados carregados
-                    tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados, procedimentos)
-                    tabela_achados = gerar_tabela_achados(auditados, procedimentos)
-                    tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados, procedimentos)
-
-                    # Atualiza o estado da sessão para refletir os dados carregados
-                    st.session_state.audit_results = {
-                        "auditados": auditados,
-                        "tabela_encaminhamentos": tabela_encaminhamentos,
-                        "tabela_achados": tabela_achados,
-                        "tabela_situacoes": tabela_situacoes,
-                    }
-                    st.session_state.audit_completed = True
-                    st.session_state.files_processed = True # Marca como processado para consistência
-                    st.session_state.download_files = {} # Limpa arquivos de download antigos
-                    st.success("Resultado da auditoria carregado com sucesso!")
-                    st.rerun() # Força o recarregamento para exibir os resultados
-            except Exception as e:
-                st.error(f"Ocorreu um erro ao carregar o arquivo: {e}")
-
-elif page == "Gerar Relatórios": # Início da página "Gerar Relatórios"
+elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
     st.title("Gerar Relatórios")
     st.info("Funcionalidade para gerar relatórios consolidados a ser implementada.")
     st.write("Esta seção permitirá a geração de relatórios personalizados a partir dos dados de auditoria processados.")
+
+
+    for auditado in auditados.values():
+        orgao = auditado.sigla
+        print(f'Gerando relatório para {orgao}')
+
+        base = DocxTemplate("docs/relatorio-preliminar-individual-base.docx")
+        filename = f"{orgao.strip()} - Relatório Individual".replace('/', '-')
+
+        print(f'Gerando para {orgao}')
+
+        contexto = {
+            'sigla_orgao': auditado.sigla,
+            'nome_orgao': auditado.nome,
+            'nome_orgao_maiusculo': auditado.nome.upper(),
+            'nota_imhc': '{:,.2f}'.format(df_imhc.loc[orgao]['iMHC_parcial']),
+            'nivel_maturidade': df_imhc.loc[orgao]['iMHC_parcial_maturidade']
+        }
+
+        #
+        # Seção Ajustes das respostas
+        #
+        # contexto = contexto | secao_ajustes(orgao)
+
+        #
+        # Seção Passos
+        #
+        # contexto = contexto | secao_passos(orgao)
+
+        #
+        # Seção dos Achados
+        #
+        # achados = resultado_achados[orgao] if orgao in resultado_achados else {}
+        # contexto['achados'] = achados
+        # contexto['tem_achados'] = True if len(contexto['achados']) > 0 else False
+
+        # print(f'Achados encontrados ({len(list(achados.keys()))}):')
+        # print(list(achados.keys()))
+
+        #
+        # Secao da Avaliação
+        #
+        # contexto = contexto | secao_graficos(orgao)
+        #print(contexto)
+
+        #
+        # Situações Encontradas
+        #
+        # contexto = contexto | secao_situacoes_encontradas(orgao)
+
+        #
+        # Seção Plano de Ação
+        #
+        # contexto = contexto | secao_plano_acao(orgao)
+
+        base.render(contexto)
+        base.save(f'docs/relatorios-individuais/{filename}.docx')
+        # convert(f'docs/relatorios-individuais/{filename}.docx', f'docs/relatorios-individuais/{filename}.pdf')
+
+        # shutil.rmtree('docs/tmp', ignore_errors=True)
+        break

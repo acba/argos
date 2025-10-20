@@ -1,4 +1,10 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
+*.py[cod]
+
+__pycache__/
+pycache/*
+__pycache__/*
 venv/
 *.pkl
 inspect_pkl.py

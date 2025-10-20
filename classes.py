@@ -96,57 +96,51 @@ class AcaoVerificacao:
                 f"resultado='{self.resultado}'")
 
     def executar(self, auditado, debug=False):
-        acao = copy.deepcopy(self)
-
         # Verifica se a ação é exclusiva para um determinado grupo de auditados.
         # Se for, e o auditado atual não estiver nesse grupo, a ação não é executada.
         # Isso permite que certas verificações sejam feitas apenas em alguns órgãos.
         if not pd.isna(self.acao_exclusiva_auditados) and (auditado not in self.acao_exclusiva_auditados):
-            return acao
+            return self
 
         if debug:
-            print(f'\tExecutando ação {acao.id}')
-            print(f'\tBuscar em "{acao.fonte_informacao.descricao}" no campo "{acao.informacao_requerida}" se ocorre "{acao.situacao_inconforme}".')
+            print(f'\tExecutando ação {self.id}')
+            print(f'\tBuscar em "{self.fonte_informacao.descricao}" no campo "{self.informacao_requerida}" se ocorre "{self.situacao_inconforme}".')
 
         # Verifica se a busca será feita em mais de um campo específico na fonte de informação
-        for info_requerida in acao.informacao_requerida.split('|'):
-            if info_requerida not in acao.fonte_informacao.info.columns:
-                print(f'ERROR: Não foi possível encontrar o campo "{acao.informacao_requerida}" na fonte de informação.')
+        for info_requerida in self.informacao_requerida.split('|'):
+            if info_requerida not in self.fonte_informacao.info.columns:
+                print(f'ERROR: Não foi possível encontrar o campo "{self.informacao_requerida}" na fonte de informação.')
                 print(f'ERROR: Ajuste o campo ou a fonte.')
-                return acao
+                return self
 
         # Realiza a busca e a verificação para cada campo especificado
-        if auditado in acao.fonte_informacao.info.index:
+        if auditado in self.fonte_informacao.info.index:
             resultado_acoes = []
-            for info_requerida in acao.informacao_requerida.split('|'):
-                acao.situacao_encontrada = acao.fonte_informacao.info.loc[auditado, info_requerida]
+            for info_requerida in self.informacao_requerida.split('|'):
+                self.situacao_encontrada = self.fonte_informacao.info.loc[auditado, info_requerida]
 
-                if acao.situacao_encontrada_nan_e_achado and pd.isna(acao.situacao_encontrada):
+                if self.situacao_encontrada_nan_e_achado and pd.isna(self.situacao_encontrada):
                     resultado_acoes.append(True)
                 else:
-                    resultado_acoes.append(avalia_expressao(acao.situacao_inconforme, acao.situacao_encontrada, debug=debug))
-                    acao.descricao_evidencia = acao.descricao_evidencia.replace('@', str(acao.situacao_encontrada))
+                    resultado_acoes.append(avalia_expressao(self.situacao_inconforme, self.situacao_encontrada, debug=debug))
+                    self.descricao_evidencia = self.descricao_evidencia.replace('@', str(self.situacao_encontrada))
 
-            acao.resultado = all(resultado_acoes)
+            self.resultado = all(resultado_acoes)
             # print(resultado_acoes)
-            # print(acao.resultado)
-            # print(acao.situacao_encontrada)
-            # print(acao.descricao_evidencia)
+            # print(self.resultado)
+            # print(self.situacao_encontrada)
+            # print(self.descricao_evidencia)
 
         else:
-            acao.resultado = True if acao.auditado_inexistente_e_achado else False
-            acao.descricao_evidencia = acao.descricao_auditado_inexistente
+            self.resultado = True if self.auditado_inexistente_e_achado else False
+            self.descricao_evidencia = self.descricao_auditado_inexistente
 
         if debug:
-            print(f'\tSituação Encontrada: {acao.situacao_encontrada}')
-            print(f'\tResultado da verificação: {acao.resultado}')
+            print(f'\tSituação Encontrada: {self.situacao_encontrada}')
+            print(f'\tResultado da verificação: {self.resultado}')
             print(f'')
 
-        # Otimização: Remove a referência ao DataFrame após a execução para reduzir o uso de memória.
-        if hasattr(acao.fonte_informacao, 'info'):
-            acao.fonte_informacao.info = None
-
-        return acao
+        return self
 
 class ProcedimentoAuditoria:
     contador = 1  # Contador de instâncias para automatizar o identificador
@@ -185,17 +179,15 @@ class ProcedimentoAuditoria:
 
     def executar(self, auditado, debug=False):
         """Executa todas as ações, avalia a lógica do achado e retorna o achado, caso encontrado."""
-        procedimento = copy.deepcopy(self)
+        # Não é mais necessário fazer deepcopy aqui. A cópia será feita no nível do Auditado.
 
-        acoes_executadas = {acao.id: acao.executar(auditado, debug) for acao in procedimento.acoes_verificacao}
-        acoes_verificacao_executadas = list(acoes_executadas.values())
-        resultados = {acao.id: acao.resultado for acao in acoes_verificacao_executadas}
+        [acao.executar(auditado, debug) for acao in self.acoes_verificacao]
+        resultados = {acao.id: acao.resultado for acao in self.acoes_verificacao}
 
         # Avalia a lógica do achado com os resultados das ações
-        achado_ocorreu = eval(procedimento.logica_achado, {}, resultados)
+        achado_ocorreu = eval(self.logica_achado, {}, resultados)
 
-        procedimento.executado = True
-        procedimento.acoes_verificacao = acoes_verificacao_executadas
+        self.executado = True
 
         if debug:
             # [print(acao) for acao in acoes_verificadas.values()]
@@ -204,10 +196,10 @@ class ProcedimentoAuditoria:
             print()
 
         if achado_ocorreu:
-            achado = Achado(numero=procedimento.numero_achado, nome=procedimento.nome_achado)
+            achado = Achado(numero=self.numero_achado, nome=self.nome_achado)
 
             encaminhamentos = []
-            for acao in procedimento.acoes_verificacao:
+            for acao in self.acoes_verificacao:
                 if acao.resultado:
                     if len(encaminhamentos):
                         encontrou = False
@@ -221,14 +213,14 @@ class ProcedimentoAuditoria:
                         encaminhamentos.append({'encaminhamento': acao.encaminhamento, 'tipo': acao.tipo_encaminhamento})
 
             achado.encaminhamentos = encaminhamentos
-            # achado.encaminhamentos = [{'encaminhamento': acao.encaminhamento, 'tipo': acao.tipo_encaminhamento} for acao in procedimento.acoes_verificacao if acao.resultado]                       # # Remover duplicatas
+            # achado.encaminhamentos = [{'encaminhamento': acao.encaminhamento, 'tipo': acao.tipo_encaminhamento} for acao in self.acoes_verificacao if acao.resultado]                       # # Remover duplicatas
             # achado.encaminhamentos = sorted(
             #     [dict(t) for t in {tuple(sorted(d.items())) for d in achado.encaminhamentos}],
             #     key=lambda x: x['tipo']
             # )
 
             evidencias = []
-            for acao in procedimento.acoes_verificacao:
+            for acao in self.acoes_verificacao:
                 if acao.resultado and acao.descricao_evidencia not in evidencias:
                     evidencias.append(acao.descricao_evidencia)
 
@@ -237,16 +229,22 @@ class ProcedimentoAuditoria:
             # achado.evidencias = list(set(achado.evidencias)) # Remover duplicatas
 
             situacoes_encontradas = []
-            for acao in procedimento.acoes_verificacao:
+            for acao in self.acoes_verificacao:
                 if acao.resultado and not pd.isna(acao.descricao_situacao_inconforme) and acao.descricao_situacao_inconforme not in situacoes_encontradas:
                     situacoes_encontradas.append(acao.descricao_situacao_inconforme)
 
-            # achado.situacoes_encontradas = [acao.descricao_situacao_inconforme for acao in procedimento.acoes_verificacao if acao.resultado and not pd.isna(acao.descricao_situacao_inconforme)]
+            # achado.situacoes_encontradas = [acao.descricao_situacao_inconforme for acao in self.acoes_verificacao if acao.resultado and not pd.isna(acao.descricao_situacao_inconforme)]
             # achado.situacoes_encontradas = list(set(achado.situacoes_encontradas))  # Remover duplicatas
             achado.situacoes_encontradas = situacoes_encontradas
-            procedimento.achado = achado
+            self.achado = achado
 
-        return procedimento
+        # Otimização: Remove a referência ao DataFrame de todas as fontes de informação
+        # usadas neste procedimento APÓS a execução de todas as ações.
+        for acao in self.acoes_verificacao:
+            if hasattr(acao.fonte_informacao, 'info') and acao.fonte_informacao.info is not None:
+                acao.fonte_informacao.info = None
+
+        return self
 
 class Auditado:
     contador = 1  # Contador de instâncias para automatizar o identificador
@@ -282,14 +280,16 @@ class Auditado:
             # print(f'Procedimento {procedimento.id} já foi executado')
             return
 
-        p = procedimento.executar(self.sigla, debug)
+        # Cria uma cópia do procedimento AQUI, uma vez por auditado.
+        p = copy.deepcopy(procedimento)
+        p.executar(self.sigla, debug)
         self.procedimentos_executados.append(p)
 
         if p.achado:
             self.tem_achados = True
 
     def aplicar_procedimentos(self, procedimentos, debug=False):
-        for procedimento in procedimentos:
+        for procedimento in procedimentos: # procedimentos é uma lista de objetos originais
             self.__aplicar_procedimento(procedimento, debug)
 
         self.foi_auditado = True
