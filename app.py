@@ -3,12 +3,18 @@ import pandas as pd
 import re
 import os
 import io
+import logging
 import pickle
 import zipfile
 from docxtpl import DocxTemplate, RichText, InlineImage
+from jinja2 import Environment, FileSystemLoader, BaseLoader
+import jinja2.meta
+import pypandoc
 
 from classes import FonteInformacao, Achado, AcaoVerificacao, ProcedimentoAuditoria, Auditado, \
     gerar_tabela_encaminhamentos, gerar_tabela_achados, gerar_tabela_situacoes_inconformes
+
+os.makedirs('tmp', exist_ok=True)
 
 # Funções auxiliares para carregar os dados dos arquivos Excel
 def carregar_dados(filepath, sheet_name=0, skiprows=2):
@@ -17,6 +23,29 @@ def carregar_dados(filepath, sheet_name=0, skiprows=2):
     except Exception as e:
         st.error(f"Erro ao carregar a planilha '{sheet_name}': {e}")
         return None
+
+def get_variaveis_template(template_md_content):
+    """Coleta as variáveis presentes em um template Jinja2."""
+    if not template_md_content:
+        return set()
+    env = Environment(loader=BaseLoader())
+    ast = env.parse(template_md_content)
+    vars_template = jinja2.meta.find_undeclared_variables(ast)
+    return vars_template
+
+# Handler de logging customizado para capturar logs do pypandoc e exibi-los no Streamlit
+class StreamlitLogHandler(logging.Handler):
+    def __init__(self, container):
+        super().__init__()
+        self.container = container
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+        msg = self.format(record)
+        # Exibe a mensagem de warning no container do Streamlit
+        self.container.warning(msg)
+
 
 # Inicializa o estado da sessão para manter os resultados após o download
 if 'files_processed' not in st.session_state:
@@ -57,6 +86,10 @@ if page == "1. Aplicar Procedimentos de Auditoria": # Início da página "Aplica
     if arquivo_auditados and arquivo_mapa_achados and arquivos_fontes_dados:
         if st.button("Processar arquivos e gerar achados"):
             # st.header("2. Processando Dados e Gerando Resultados")
+            st.session_state.files_processed = False
+            st.session_state.audit_completed = False
+            st.session_state.audit_results = None
+
             try:
                 if not st.session_state.files_processed:
                     # Leitura dos DataFrames
@@ -168,12 +201,12 @@ if page == "1. Aplicar Procedimentos de Auditoria": # Início da página "Aplica
                     with st.spinner("Executando procedimentos de auditoria... Por favor, aguarde."):
                         # Execução da auditoria
                         for auditado in auditados.values():
-                            auditado.aplicar_procedimentos(procedimentos.values(), debug=True)
+                            auditado.aplicar_procedimentos(procedimentos.values(), debug=False)
 
                         # Geração das tabelas
-                        tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados, procedimentos)
-                        tabela_achados = gerar_tabela_achados(auditados, procedimentos)
-                        tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados, procedimentos)
+                        tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados)
+                        tabela_achados = gerar_tabela_achados(auditados)
+                        tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados)
 
                         st.session_state.audit_results = {
                             "auditados": auditados,
@@ -205,16 +238,10 @@ elif page == "1. Carregar resultado de auditoria": # Início da nova página
                     # Carrega o objeto 'auditados' do arquivo pkl
                     auditados = pickle.load(arquivo_resultado)
 
-                    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
-                    procedimentos = {}
-                    # Pega os procedimentos aplicados em qualquer um:
-                    for p in list(auditados.values())[0].procedimentos_executados:
-                        procedimentos[p.id] = p
-
                     # Gera novamente as tabelas a partir dos dados carregados
-                    tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados, procedimentos)
-                    tabela_achados = gerar_tabela_achados(auditados, procedimentos)
-                    tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados, procedimentos)
+                    tabela_encaminhamentos = gerar_tabela_encaminhamentos(auditados)
+                    tabela_achados = gerar_tabela_achados(auditados)
+                    tabela_situacoes = gerar_tabela_situacoes_inconformes(auditados)
 
                     # Atualiza o estado da sessão para refletir os dados carregados
                     st.session_state.audit_results = {
@@ -390,38 +417,164 @@ elif page == "2. Visualizar resultado de auditoria": # Início da nova página
 
 elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
     st.title("Gerar Relatórios")
-    st.info("Funcionalidade para gerar relatórios consolidados a ser implementada.")
     st.write("Esta seção permitirá a geração de relatórios personalizados a partir dos dados de auditoria processados.")
 
     if st.session_state.audit_completed:
         results = st.session_state.audit_results
+        auditados = results["auditados"]
 
-        if st.button("Gerar relatórios"):
-            contexto_anexo_evidencias = []
-            for auditado in results["auditados"].values():
-                contexto_anexo_evidencias.append({
-                    'sigla_orgao': auditado.sigla,
-                    'nome_orgao': auditado.nome,
-                    'achados': list(auditado.get_achados().values()),
-                })
+        tab_individuais, tab_consolidado = st.tabs(["Relatórios Individuais", "Anexo de Evidências"])
 
-            base = DocxTemplate("docs/anexo-evidencias-base.docx")
-            filename = f"ANXX - Evidências".replace('/', '-')
-            contexto = {'dados': contexto_anexo_evidencias}
-            base.render(contexto)
+        with tab_consolidado:
+            st.subheader("Gerar Anexo de Evidências")
+            if st.button("Gerar Anexo de Evidências"):
+                with st.spinner("Gerando anexo..."):
+                    contexto_anexo_evidencias = []
+                    for auditado in auditados.values():
+                        contexto_anexo_evidencias.append({
+                            'sigla_orgao': auditado.sigla,
+                            'nome_orgao': auditado.nome,
+                            'achados': list(auditado.get_achados().values()),
+                        })
 
-            bio = io.BytesIO()
-            base.save(bio)
-            docx_bytes = bio.getvalue()
-            st.session_state.download_files['relatorio_evidencias'] = docx_bytes
+                    base = DocxTemplate("docs/anexo-evidencias-base.docx")
+                    contexto = {'dados': contexto_anexo_evidencias}
+                    base.render(contexto)
 
-        if 'relatorio_evidencias' in st.session_state.download_files:
-            st.download_button(
-                label="Baixar Anexo de Evidências",
-                data=st.session_state.download_files['relatorio_evidencias'],
-                file_name=f"ANXX - Evidências.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key="download_relatorio_evidencias"
-            )
+                    bio = io.BytesIO()
+                    base.save(bio)
+                    docx_bytes = bio.getvalue()
+                    st.session_state.download_files['relatorio_evidencias'] = docx_bytes
+
+            if 'relatorio_evidencias' in st.session_state.download_files:
+                st.download_button(
+                    label="Baixar Anexo de Evidências",
+                    data=st.session_state.download_files['relatorio_evidencias'],
+                    file_name="ANXX - Evidências.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="download_relatorio_evidencias"
+                )
+
+        with tab_individuais:
+            st.subheader("Gerar Relatórios Individuais")
+
+            st.info("Unidades auditadas e achados encontrados na auditoria.")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("Auditados:")
+                df_auditados = pd.DataFrame([{'sigla': auditado.sigla, 'nome': auditado.nome} for auditado in auditados.values()]).set_index('sigla')
+                st.dataframe(df_auditados, height=200)
+            with col2:
+                st.write("Achados:")
+                df_achados_encontrados = pd.DataFrame([{'nome': nome_achado} for nome_achado in gerar_tabela_achados(auditados).columns])
+                st.dataframe(df_achados_encontrados, height=200)
+
+            st.subheader("1. Forneça dados de contexto adicionais (Opcional)")
+            arquivo_contexto = st.file_uploader("Carregar Planilha de Contexto (.xlsx)", type=["xlsx"], help="A planilha deve ter uma coluna 'sigla' para identificar o auditado e as demais colunas com os dados de contexto.")
+            df_contexto_extra = None
+            if arquivo_contexto:
+                df_contexto_extra = pd.read_excel(arquivo_contexto).set_index('sigla')
+                st.write("Dados de contexto carregados:")
+                st.dataframe(df_contexto_extra.head())
+
+            st.subheader("2. Forneça o template do relatório")
+            template_md_content = st.text_area("Cole o template Markdown/Jinja2 aqui", height=250)
+            st.write("Ou")
+            arquivo_template_md = st.file_uploader("Carregue um arquivo de template (.md)", type=["md"])
+
+            if arquivo_template_md:
+                template_md_content = arquivo_template_md.read().decode('utf-8')
+                st.text_area("Conteúdo do template carregado:", template_md_content, height=250, disabled=True)
+
+            if template_md_content:
+                vars_template = get_variaveis_template(template_md_content)
+                st.write("Variáveis encontradas no template:")
+                st.code(f"{vars_template}")
+
+            st.subheader("3. Gere os relatórios")
+            if st.button("Gerar Relatórios Individuais"):
+                if not template_md_content:
+                    st.error("Por favor, forneça um template (colando o texto ou carregando o arquivo .md).")
+                else:
+                    with st.spinner("Gerando relatórios individuais..."):
+                        env = Environment(loader=BaseLoader())
+                        template = env.from_string(template_md_content)
+                        template_relatorio_individual_docx = 'docs/template-relatorio-individual.docx'
+
+                        generation_log = st.expander("Log de Geração", expanded=True)
+                        zip_buffer_individuais = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer_individuais, 'w', zipfile.ZIP_DEFLATED) as zip_f:
+                            for sigla, row_auditado in df_auditados.iterrows():
+                                with generation_log:
+                                    st.markdown(f"--- \n#### Processando: **{sigla}**")
+                                    d_contexto_auditado = row_auditado.to_dict()
+                                    d_contexto_auditado['sigla'] = sigla
+
+                                    if df_contexto_extra is not None and sigla in df_contexto_extra.index:
+                                        contexto_extra_auditado = df_contexto_extra.loc[sigla].to_dict()
+                                        d_contexto_auditado.update(contexto_extra_auditado)
+
+                                    # Adiciona dados da auditoria ao contexto
+                                    auditado_obj = auditados[sigla]
+                                    d_contexto_auditado['achados'] = list(auditado_obj.get_achados().values())
+                                    d_contexto_auditado['situacoes_inconformes'] = auditado_obj.get_situacoes_inconformes()
+                                    d_contexto_auditado['plano_acao'] = auditado_obj.get_plano_acao()
+
+                                    conteudo_final_md = template.render(d_contexto_auditado)
+
+                                    # Checagem de variáveis
+                                    vars_contexto = set(d_contexto_auditado.keys())
+                                    vars_faltando = vars_template - vars_contexto
+                                    vars_nao_utilizadas = vars_contexto - vars_template
+
+                                    if len(vars_faltando):
+                                        st.warning(f"**Variáveis faltando:** As seguintes variáveis esperadas no template NÃO foram encontradas nos dados: `{vars_faltando}`")
+
+                                    if len(vars_nao_utilizadas):
+                                        st.info(f"**Variáveis não utilizadas:** As seguintes variáveis dos dados não foram usadas no template: `{vars_nao_utilizadas}`")
+
+                                    # Salva MD temporariamente
+                                    md_filename = f'tmp/relatorio-individual-{sigla}.md'
+                                    with open(md_filename, 'w', encoding='utf-8') as f:
+                                        f.write(conteudo_final_md)
+
+                                    # Converte para DOCX
+                                    docx_filename = f'tmp/relatorio-individual-{sigla}.docx'
+                                    args_docx = ['--reference-doc=' + template_relatorio_individual_docx, '--figure-caption-position=above', '--filter=pandoc-crossref']
+
+                                    # Configura o logger para capturar avisos do pypandoc
+                                    pypandoc_logger = logging.getLogger('pypandoc')
+                                    pypandoc_logger.setLevel(logging.WARNING)
+                                    log_container = st.empty()
+                                    handler = StreamlitLogHandler(log_container)
+                                    pypandoc_logger.addHandler(handler)
+
+                                    try:
+                                        output = pypandoc.convert_file(md_filename, to='docx', outputfile=docx_filename, extra_args=args_docx)
+                                        assert output == ""
+                                        if not handler.records: # Se não houve warnings
+                                            st.success(f"Relatório para **{sigla}** gerado com sucesso.")
+                                    except Exception as e:
+                                        st.error(f"Erro ao gerar relatório para **{sigla}**: {e}")
+                                    finally:
+                                        pypandoc_logger.removeHandler(handler)
+
+
+                                    # Adiciona os arquivos .md e .docx ao ZIP
+                                    zip_f.write(docx_filename, arcname=f'Relatorio-{sigla}.docx')
+                                    zip_f.write(md_filename, arcname=f'Relatorio-{sigla}.md')
+
+                        st.session_state.download_files['relatorios_individuais_zip'] = zip_buffer_individuais.getvalue()
+                        st.success("Relatórios individuais gerados e compactados com sucesso!")
+
+            if 'relatorios_individuais_zip' in st.session_state.download_files:
+                st.download_button(
+                    label="Baixar Todos os Relatórios Individuais (.zip)",
+                    data=st.session_state.download_files['relatorios_individuais_zip'],
+                    file_name="relatorios_individuais.zip",
+                    mime="application/zip",
+                    key="download_individuais_zip"
+                )
+
     else:
         st.info("Por favor, carregue e processe os arquivos da auditoria antes de gerar relatórios.")

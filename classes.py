@@ -4,6 +4,7 @@ import copy
 import pickle
 import pandas as pd
 from docx import Document
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 from utils import avalia_expressao
 
@@ -410,6 +411,19 @@ class Auditado:
         # Carregar o documento template
         doc = Document('docs/template_report.docx')
 
+        # Pegar a coleção de estilos do documento
+        styles = doc.styles
+
+        # Aplicar justificado nos estilos que você usa
+        # Adicione todos os estilos que você quer justificar
+        try:
+            styles['Normal'].paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+            styles['List Bullet'].paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+            styles['List Bullet 2'].paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+            styles['List Bullet 3'].paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        except KeyError as e:
+            print(f"Aviso: Estilo {e} não encontrado no template. Ignorando justificação para ele.")
+
         # Título do relatório
         doc.add_heading(f"{self.sigla} - {self.nome}", level=1)
 
@@ -468,7 +482,13 @@ class Auditado:
 
         return doc
 
-def gerar_tabela_achados(auditados, procedimentos):
+def gerar_tabela_achados(auditados):
+    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
+    procedimentos = {}
+    # Pega os procedimentos aplicados em qualquer um:
+    for p in list(auditados.values())[0].procedimentos_executados:
+        procedimentos[p.id] = p
+
     # Coleta todos os nomes de achados únicos
     nomes_todos_achados = sorted({f"{p.numero_achado}. {p.nome_achado}" for p in procedimentos.values()})
 
@@ -491,7 +511,14 @@ def gerar_tabela_achados(auditados, procedimentos):
 
     return df_achados
 
-def gerar_tabela_encaminhamentos(auditados, procedimentos):
+def gerar_tabela_encaminhamentos(auditados):
+    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
+    procedimentos = {}
+    # Pega os procedimentos aplicados em qualquer um:
+    for p in list(auditados.values())[0].procedimentos_executados:
+        procedimentos[p.id] = p
+
+
     # Coleta todos os encaminhamentos únicos
     todos_encaminhamentos = sorted({(acao.tipo_encaminhamento, acao.encaminhamento) for p in procedimentos.values()
                                     for acao in p.acoes_verificacao if acao.encaminhamento}, key=lambda x: (x[0], x[1]))
@@ -517,8 +544,13 @@ def gerar_tabela_encaminhamentos(auditados, procedimentos):
 
     return df_encaminhamentos
 
+def gerar_tabela_situacoes_inconformes(auditados):
+    # Reconstrói o dicionário de procedimentos a partir dos achados em cada auditado
+    procedimentos = {}
+    # Pega os procedimentos aplicados em qualquer um:
+    for p in list(auditados.values())[0].procedimentos_executados:
+        procedimentos[p.id] = p
 
-def gerar_tabela_situacoes_inconformes(auditados, procedimentos):
     # Coleta todos os encaminhamentos únicos
     todas_situacoes_inconformes = []
     for p in procedimentos.values():

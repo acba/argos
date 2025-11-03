@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 
+.ipynb_checkpoints/
 __pycache__/
 pycache/*
 __pycache__/*
@@ -10,3 +11,4 @@ venv/
 inspect_pkl.py
 *.svg
 *.pyc
+tmp/
