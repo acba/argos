@@ -112,7 +112,9 @@ class AcaoVerificacao:
             if info_requerida not in self.fonte_informacao.info.columns:
                 print(f'ERROR: Não foi possível encontrar o campo "{self.informacao_requerida}" na fonte de informação.')
                 print(f'ERROR: Ajuste o campo ou a fonte.')
-                return self
+                # return self
+                raise ValueError(f'Na Ação de Verificação "{self.id}", não foi possível encontrar a coluna "{info_requerida}" na fonte de informação "{self.fonte_informacao.descricao}". '
+                                 f'Verifique se o nome da coluna está correto no "mapa-verificacao-achados.xlsx".')
 
         # Realiza a busca e a verificação para cada campo especificado
         if auditado in self.fonte_informacao.info.index:
@@ -127,10 +129,6 @@ class AcaoVerificacao:
                     self.descricao_evidencia = self.descricao_evidencia.replace('@', str(self.situacao_encontrada))
 
             self.resultado = all(resultado_acoes)
-            # print(resultado_acoes)
-            # print(self.resultado)
-            # print(self.situacao_encontrada)
-            # print(self.descricao_evidencia)
 
         else:
             self.resultado = True if self.auditado_inexistente_e_achado else False
@@ -295,6 +293,34 @@ class Auditado:
 
         self.foi_auditado = True
 
+    def show(self):
+        """Retorna uma string formatada com os dados do auditado."""
+        report_lines = []
+        report_lines.append("==================================================")
+        report_lines.append(f"            Relatório do Auditado - {self.sigla}            ")
+        report_lines.append("==================================================")
+        report_lines.append(f"Sigla: {self.sigla}")
+        report_lines.append(f"Nome: {self.nome}")
+        report_lines.append(f"Foi auditado: {'Sim' if self.foi_auditado else 'Não'}")
+        report_lines.append(f"Tem achados: {'Sim' if self.tem_achados else 'Não'}")
+        report_lines.append("\n--- Procedimentos Aplicados ---")
+        if self.procedimentos_executados:
+            for p in self.procedimentos_executados:
+                achado_info = f"(Achado: {p.achado.nome})" if p.achado else "(Sem achado)"
+                report_lines.append(f"  - {p.id}: {p.descricao} {achado_info}")
+        else:
+            report_lines.append("  Nenhum procedimento aplicado ainda.")
+        report_lines.append("\n--- Lista de Achados Encontrados ---")
+        nomes_achados = self.get_nomes_achados()
+        if nomes_achados:
+            for achado in nomes_achados:
+                report_lines.append(f"  - {achado}")
+        else:
+            report_lines.append("  Nenhum achado encontrado.")
+        report_lines.append("==================================================\n")
+
+        return "\n".join(report_lines)
+
     def get_nomes_achados(self):
         """Retorna uma lista dos nomes dos achados identificados para o auditado."""
         return [f"{p.achado.numero}. {p.achado.nome}" for p in self.procedimentos_executados if p.achado is not None]
@@ -302,6 +328,13 @@ class Auditado:
     def get_achados(self):
         """Retorna uma lista dos nomes dos achados identificados para o auditado."""
         return {f"achado{p.achado.numero}": p.achado for p in self.procedimentos_executados if p.achado is not None}
+
+    def get_achado_por_nome(self, nome_achado):
+        """Retorna o objeto Achado correspondente ao nome fornecido."""
+        for p in self.procedimentos_executados:
+            if p.achado and p.achado.nome == nome_achado:
+                return p.achado
+        return None
 
     def get_situacoes_inconformes(self):
         situacoes = []
@@ -340,17 +373,6 @@ class Auditado:
                         encaminhamentos.append({'achado_num': p.achado.numero, 'encaminhamento': acao.encaminhamento, 'tipo': acao.tipo_encaminhamento})
 
         return encaminhamentos
-
-#         plano = []
-#         for p in self.procedimentos_executados:
-#             if p.achado is not None:
-#                 for e in p.achado.encaminhamentos:
-#                     plano.append({'achado_num': p.achado.numero, 'encaminhamento': e['encaminhamento'].strip()})
-
-#         return sorted(
-#             [dict(t) for t in {tuple(sorted(d.items())) for d in plano}],
-#             key=lambda x: x['achado_num']
-#         )
 
     def reporta_procedimentos(self):
         conteudo_md = f"# {self.sigla} - {self.nome}\n\n"

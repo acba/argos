@@ -7,7 +7,7 @@ import logging
 import pickle
 import zipfile
 from docxtpl import DocxTemplate, RichText, InlineImage
-from jinja2 import Environment, FileSystemLoader, BaseLoader
+from jinja2 import Environment, FileSystemLoader, BaseLoader, StrictUndefined
 import jinja2.meta
 import pypandoc
 
@@ -215,7 +215,6 @@ if page == "1. Aplicar Procedimentos de Auditoria": # Início da página "Aplica
                             "tabela_situacoes": tabela_situacoes,
                         }
                         st.session_state.audit_completed = True
-                        st.success("Auditoria concluída!")
 
             except Exception as e:
                 st.error(f"Ocorreu um erro durante o processamento: {e}")
@@ -474,8 +473,10 @@ elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
             df_contexto_extra = None
             if arquivo_contexto:
                 df_contexto_extra = pd.read_excel(arquivo_contexto).set_index('sigla')
-                st.write("Dados de contexto carregados:")
+                st.write("Planilha de contexto carregadas:")
                 st.dataframe(df_contexto_extra.head())
+
+            arquivos_fontes_contexto = st.file_uploader("Arquivos presentes na planilha de contexto", accept_multiple_files=True)
 
             st.subheader("2. Forneça o template do relatório")
             template_md_content = st.text_area("Cole o template Markdown/Jinja2 aqui", height=250)
@@ -497,8 +498,8 @@ elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
                     st.error("Por favor, forneça um template (colando o texto ou carregando o arquivo .md).")
                 else:
                     with st.spinner("Gerando relatórios individuais..."):
-                        env = Environment(loader=BaseLoader())
-                        template = env.from_string(template_md_content)
+                        # Usar StrictUndefined para lançar erro se uma variável não for encontrada
+                        env = Environment(loader=BaseLoader(), undefined=StrictUndefined)
                         template_relatorio_individual_docx = 'docs/template-relatorio-individual.docx'
 
                         generation_log = st.expander("Log de Geração", expanded=True)
@@ -514,24 +515,26 @@ elif page == "3. Gerar Relatórios": # Início da página "Gerar Relatórios"
                                         contexto_extra_auditado = df_contexto_extra.loc[sigla].to_dict()
                                         d_contexto_auditado.update(contexto_extra_auditado)
 
-                                    # Adiciona dados da auditoria ao contexto
-                                    auditado_obj = auditados[sigla]
-                                    d_contexto_auditado['achados'] = list(auditado_obj.get_achados().values())
-                                    d_contexto_auditado['situacoes_inconformes'] = auditado_obj.get_situacoes_inconformes()
-                                    d_contexto_auditado['plano_acao'] = auditado_obj.get_plano_acao()
+                                    # Adiciona o objeto auditado inteiro ao contexto. Mais simples e flexível!
+                                    d_contexto_auditado['auditado'] = auditados[sigla]
 
-                                    conteudo_final_md = template.render(d_contexto_auditado)
+                                    try:
+                                        template = env.from_string(template_md_content)
+                                        conteudo_final_md = template.render(d_contexto_auditado)
 
-                                    # Checagem de variáveis
-                                    vars_contexto = set(d_contexto_auditado.keys())
-                                    vars_faltando = vars_template - vars_contexto
-                                    vars_nao_utilizadas = vars_contexto - vars_template
+                                        # Checagem de variáveis (opcional, mas útil para debug)
+                                        vars_contexto = set(d_contexto_auditado.keys())
+                                        vars_faltando = vars_template - vars_contexto
+                                        vars_nao_utilizadas = vars_contexto - vars_template
 
-                                    if len(vars_faltando):
-                                        st.warning(f"**Variáveis faltando:** As seguintes variáveis esperadas no template NÃO foram encontradas nos dados: `{vars_faltando}`")
+                                        if len(vars_faltando):
+                                            st.info(f"**Variáveis de contexto não utilizadas:** As seguintes variáveis dos dados não foram usadas no template: `{vars_nao_utilizadas}`")
 
-                                    if len(vars_nao_utilizadas):
-                                        st.info(f"**Variáveis não utilizadas:** As seguintes variáveis dos dados não foram usadas no template: `{vars_nao_utilizadas}`")
+                                    except jinja2.exceptions.UndefinedError as e:
+                                        st.error(f"**Erro no template para `{sigla}`:** A variável `{e.message.split(' is undefined')[0]}` não foi encontrada.")
+                                        st.error("Verifique se o nome da variável está correto no template e se ela foi fornecida nos dados de contexto.")
+                                        # Pula para o próximo auditado
+                                        continue
 
                                     # Salva MD temporariamente
                                     md_filename = f'tmp/relatorio-individual-{sigla}.md'

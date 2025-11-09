@@ -12,3 +12,7 @@ inspect_pkl.py
 *.svg
 *.pyc
 tmp/
+TODO
+req.txt
+instalar_dep.txt
+prototipo.ipynb
