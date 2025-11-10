@@ -1,5 +1,39 @@
 import re
-import numpy as np
+import streamlit as st
+import pandas as pd
+import jinja2
+from jinja2 import Environment, BaseLoader
+import logging
+
+
+def carregar_dados(filepath, sheet_name=0, skiprows=2):
+    """Lê um arquivo Excel e retorna um DataFrame, tratando erros."""
+    try:
+        return pd.read_excel(filepath, sheet_name=sheet_name, skiprows=skiprows).map(lambda x: x.strip() if isinstance(x, str) else x)
+    except Exception as e:
+        st.error(f"Erro ao carregar a planilha '{sheet_name}': {e}")
+        return None
+
+def get_variaveis_template(template_md_content):
+    """Coleta as variáveis presentes em um template Jinja2."""
+    if not template_md_content:
+        return set()
+    env = Environment(loader=BaseLoader())
+    ast = env.parse(template_md_content)
+    return jinja2.meta.find_undeclared_variables(ast)
+
+class StreamlitLogHandler(logging.Handler):
+    """Handler de logging customizado para exibir logs do pypandoc no Streamlit."""
+    def __init__(self, container):
+        super().__init__()
+        self.container = container
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+        msg = self.format(record)
+        self.container.warning(msg)
+
 
 def parse_expression(expression):
     tokens = []
