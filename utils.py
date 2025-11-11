@@ -154,9 +154,6 @@ def processa_imagens_contexto(contexto, context_files_path_map, template_type, b
     
     return contexto
 
-
-import re
-
 def cross_ref_figuras(template_str: str) -> str:
     """
     Processa um template de texto para numerar automaticamente as referências
