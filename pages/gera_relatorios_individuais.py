@@ -12,7 +12,7 @@ from docx.shared import Mm
 from jinja2 import Environment, BaseLoader, StrictUndefined, exceptions
 
 from classes import gerar_tabela_achados
-from utils import get_variaveis_template, StreamlitLogHandler
+from utils import get_variaveis_template, StreamlitLogHandler, processa_imagens_contexto, cross_ref_figuras
 
 st.set_page_config(page_title="Gera Relatórios Individuais", layout="wide")
 
@@ -211,15 +211,19 @@ if st.session_state.audit_completed:
 
                             if arquivo_template_md:
                                 try:
+                                    # Processa as imagens para o contexto do Markdown
+                                    contexto = processa_imagens_contexto(contexto, context_files_path_map, 'md')
+                                    template_content = cross_ref_figuras(template_content)
+
                                     template_md = env.from_string(template_content)
                                     conteudo_final_md = template_md.render(contexto)
 
-                                    md_filename = f'tmp/relatorio-{sigla}.md'
+                                    md_filename = f'tmp/_relatorio-{sigla}.md'
                                     with open(md_filename, 'w', encoding='utf-8') as f:
                                         f.write(conteudo_final_md)
 
                                     docx_filename = f'tmp/relatorio-{sigla}.docx'
-                                    args_docx = ['--reference-doc=' + template_ref_docx]
+                                    args_docx = ['--figure-caption-position=above', '--reference-doc=' + template_ref_docx]
                                     pypandoc_logger = logging.getLogger('pypandoc')
                                     pypandoc_logger.setLevel(logging.WARNING)
                                     log_container = st.empty()
@@ -239,20 +243,8 @@ if st.session_state.audit_completed:
                             elif arquivo_template_docx:
                                 try:
                                     base_docx = DocxTemplate(arquivo_template_docx)
-                                    image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
-
-                                    # Itera sobre o contexto para encontrar caminhos de imagem e convertê-los
-                                    for key, value in contexto.items():
-                                        if isinstance(value, str) and value.lower().endswith(image_extensions):
-                                            # Verifica se o nome do arquivo de imagem existe no mapa de arquivos de contexto
-                                            if value in context_files_path_map:
-                                                image_path = context_files_path_map[value]
-                                                # Substitui o caminho da imagem pelo objeto InlineImage
-                                                contexto[key] = InlineImage(base_docx, image_path, width=Mm(160))
-                                            else:
-                                                st.warning(f"Arquivo de imagem '{value}' para a variável '{key}' não encontrado entre os arquivos de contexto carregados. A imagem não será inserida.")
-                                                contexto[key] = f"[Imagem '{value}' não encontrada]"
-
+                                    # Processa as imagens para o contexto do DOCX
+                                    contexto = processa_imagens_contexto(contexto, context_files_path_map, 'docx', base_docx=base_docx)
                                     base_docx.render(contexto)
                                 except Exception as e:
                                     st.error(f"Erro ao renderizar o template DOCX para **{sigla}**: {e}")

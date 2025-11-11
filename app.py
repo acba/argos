@@ -31,7 +31,7 @@ home_page = st.Page("pages/home.py", title="Home", default=True)
 aplica_procedimento_page = st.Page('pages/aplica_procedimentos.py', title="Aplica Procedimentos")
 carrega_auditoria_page = st.Page('pages/carrega_auditoria.py', title="Carregar Resultado")
 visualiza_resultados_page = st.Page('pages/visualiza_resultados.py', title="Visualiza Resultado")
-gera_relatorios_individuais_page = st.Page('pages/gera_relatorios.py', title="Gera Relatórios Individuais")
+gera_relatorios_individuais_page = st.Page('pages/gera_relatorios_individuais.py', title="Gera Relatórios Individuais")
 gera_anexo_evidencias_page = st.Page('pages/gera_anexo_evidencias.py', title="Gera Anexo Evidências")
 
 pg = st.navigation(

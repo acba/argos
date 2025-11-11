@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 import jinja2
 from jinja2 import Environment, BaseLoader
+from docxtpl import InlineImage
+from docx.shared import Mm
 import logging
 
 
@@ -127,3 +129,115 @@ def avalia_expressao(expressao_achado, situacao_encontrada, debug=False):
             return pilha[0]
         else:
             raise ValueError("Expressão lógica inválida")
+
+def processa_imagens_contexto(contexto, context_files_path_map, template_type, base_docx=None):
+    """Substitui nomes de arquivos de imagem no contexto pelos caminhos ou objetos de imagem apropriados."""
+    image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+    
+    # Itera sobre uma cópia dos itens para permitir a modificação do dicionário
+    for key, value in list(contexto.items()):
+        if isinstance(value, str) and value.lower().endswith(image_extensions):
+            if value in context_files_path_map:
+                image_path = context_files_path_map[value]
+                if template_type == 'docx':
+                    if base_docx is None:
+                        st.error("O objeto base_docx é necessário para processar imagens em templates .docx")
+                        continue
+                    # Para docx, substitui pelo objeto InlineImage
+                    contexto[key] = InlineImage(base_docx, image_path, width=Mm(160))
+                elif template_type == 'md':
+                    # Para markdown, substitui pelo caminho do arquivo
+                    contexto[key] = image_path
+            else:
+                st.warning(f"Arquivo de imagem '{value}' para a variável '{key}' não encontrado. A imagem não será inserida.")
+                contexto[key] = f"[Imagem '{value}' não encontrada]"
+    
+    return contexto
+
+
+import re
+
+def cross_ref_figuras(template_str: str) -> str:
+    """
+    Processa um template de texto para numerar automaticamente as referências
+    de figuras e modificar as legendas das imagens, preservando os
+    atributos de formatação do Pandoc (ex: {width=10cm}).
+
+    A função opera em duas passadas:
+    
+    1. Mapeamento: 
+       Encontra todas as declarações ({#fig:ID#}) e referências ([@fig:ID])
+       na ordem em que aparecem para criar um mapa de numeração
+       (ex: {'fig_01': 1, 'fig_02': 2}).
+       
+    2. Substituição:
+       - Substitui referências de texto (ex: [@fig:fig_01] -> "Figura 1").
+       - Encontra as linhas de imagem (ex: ![Texto]({{path}}){attrs}{#fig:ID#})
+         e as substitui por "![Figura 1 - Texto]({{path}}){attrs}".
+    """
+    
+    # --- Passa 1: Mapeamento ---
+    
+    figura_map = {}
+    contador = 1
+
+    # Regex combinada (NÃO MUDA)
+    regex_combinado = r"(?:\{#fig:([^#]+)#\}|\[@fig:([^\]]+)\])"
+
+    for match in re.finditer(regex_combinado, template_str):
+        id_declaracao = match.group(1)
+        id_referencia = match.group(2)
+        fig_id = id_declaracao if id_declaracao else id_referencia
+        
+        if fig_id and fig_id not in figura_map:
+            figura_map[fig_id] = contador
+            contador += 1
+
+    if not figura_map:
+        return template_str
+
+    # --- Passa 2: Substituições ---
+
+    texto_processado = template_str
+
+    # 1. Substituir referências de TEXTO (NÃO MUDA)
+    regex_ref_texto = r"\[@fig:([^\]]+)\]"
+    
+    def substituir_ref_texto(match):
+        fig_id = match.group(1)
+        if fig_id in figura_map:
+            return f"Figura {figura_map[fig_id]}"
+        return match.group(0)
+
+    texto_processado = re.sub(regex_ref_texto, substituir_ref_texto, texto_processado)
+
+    # 2. Modificar linhas de IMAGEM e remover tags de declaração (MODIFICADO)
+    
+    # Regex ATUALIZADA:
+    # Grupo 1: ![ (alt text) ]
+    # Grupo 2: (path)
+    # Grupo 3: (bloco de atributos opcional, ex: {width=10cm})
+    # Grupo 4: {#fig: (ID) #}
+    regex_imagem_decl = r"!\[([^\]]*)\](\([^)]*\))\s*(\{[^}]*\})?\s*\{#fig:([^#]+)#\}"
+
+    def modificar_legenda_imagem(match):
+        alt_text = match.group(1)
+        path = match.group(2)
+        attributes = match.group(3)  # O bloco {width=10cm}
+        fig_id = match.group(4)
+        
+        if fig_id in figura_map:
+            numero = figura_map[fig_id]
+            
+            # Se o grupo de atributos não for encontrado (None), 
+            # o transformamos em uma string vazia.
+            attr_str = attributes if attributes else ""
+            
+            # Reconstrói a string: ![Figura X - Texto](path){atributos}
+            return f"![Figura {numero} - {alt_text}]{path}{attr_str}"
+        
+        return match.group(0) # Failsafe
+
+    texto_processado = re.sub(regex_imagem_decl, modificar_legenda_imagem, texto_processado)
+    
+    return texto_processado

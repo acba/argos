@@ -25,7 +25,7 @@ with st.expander("1. Carregar Arquivos Excel", expanded=True):
         st.write("")
         st.write("")
         with open("docs/bd_auditados.xlsx", "rb") as file:
-            st.download_button(label="Baixar Exemplo", data=file, file_name="bd_auditados.xlsx",
+            st.download_button(label="Baixar Exemplo", data=file, file_name="bd_auditados.xlsx", icon=":material/table:",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     col1, col2 = st.columns([3, 1])
@@ -36,7 +36,7 @@ with st.expander("1. Carregar Arquivos Excel", expanded=True):
         st.write("")
         st.write("")
         with open("docs/mapa-verificacao-achados.xlsx", "rb") as file:
-            st.download_button(label="Baixar Exemplo", data=file, file_name="mapa-verificacao-achados.xlsx",
+            st.download_button(label="Baixar Exemplo", data=file, file_name="mapa-verificacao-achados.xlsx", icon=":material/table:",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     col1, col2 = st.columns([3, 1])
@@ -47,7 +47,7 @@ with st.expander("1. Carregar Arquivos Excel", expanded=True):
         st.write("")
         st.write("")
         with open("docs/fonte_informacao.xlsx", "rb") as file:
-            st.download_button(label="Baixar Exemplo", data=file, file_name="fonte_informacao.xlsx",
+            st.download_button(label="Baixar Exemplo", data=file, file_name="fonte_informacao.xlsx", icon=":material/table:",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     if not arquivo_auditados or not arquivo_mapa_achados or not arquivos_fontes_dados:
