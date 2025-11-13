@@ -33,11 +33,14 @@ carrega_auditoria_page = st.Page('pages/carrega_auditoria.py', title="Carregar R
 visualiza_resultados_page = st.Page('pages/visualiza_resultados.py', title="Visualiza Resultado")
 gera_relatorios_individuais_page = st.Page('pages/gera_relatorios_individuais.py', title="Gera Relatórios Individuais")
 gera_anexo_evidencias_page = st.Page('pages/gera_anexo_evidencias.py', title="Gera Anexo Evidências")
+analise_gemini_auditados_page = st.Page('pages/analise_gemini.py', title="Análise de Auditados com IA")
+analise_ia_geral_page = st.Page('pages/analise_ia_geral.py', title="Análise Geral com IA")
 
 pg = st.navigation(
     {
         "Procedimentos": [home_page, aplica_procedimento_page, carrega_auditoria_page, visualiza_resultados_page],
         "Relatório": [gera_relatorios_individuais_page, gera_anexo_evidencias_page],
+        "Análise IA": [analise_gemini_auditados_page, analise_ia_geral_page],
     }
 )
 

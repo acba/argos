@@ -2,7 +2,8 @@ import re
 import streamlit as st
 import pandas as pd
 import jinja2
-from jinja2 import Environment, BaseLoader
+from jinja2 import Environment, BaseLoader, StrictUndefined
+from google.genai import types
 from docxtpl import InlineImage
 from docx.shared import Mm
 import logging
@@ -238,3 +239,37 @@ def cross_ref_figuras(template_str: str) -> str:
     texto_processado = re.sub(regex_imagem_decl, modificar_legenda_imagem, texto_processado)
     
     return texto_processado
+
+
+def avalia_gemini(client, prompt_text: str, modelo, temperature, response_format_choice, file_objects = []):
+    """
+    Chama a API do Gemini com a configuração apropriada.
+    Retorna a resposta do modelo e uma mensagem de erro (se houver).
+    """
+    try:
+        contents = [prompt_text] + file_objects
+        # st.info(f'Avaliando com o modelo {modelo}...') # Comentado para evitar chamadas Streamlit em utils
+
+        generation_config = types.GenerateContentConfig(
+            max_output_tokens=65536, # Usando o valor sugerido de 65536
+            temperature=temperature,
+        )
+
+        if response_format_choice == 'JSON':
+            generation_config.response_mime_type = 'application/json'
+
+        # Cria o conteúdo para a API
+        response = client.models.generate_content(
+            model=modelo,
+            contents=contents,
+            generation_config=generation_config
+        )
+
+        # Verifica se o modelo parou por algum motivo
+        if response.prompt_feedback.block_reason:
+            return None, f"A requisição foi bloqueada. Motivo: {response.prompt_feedback.block_reason.name}"
+
+        return response, None
+
+    except Exception as e:
+        return None, f"Erro ao chamar a API Gemini: {e}"
