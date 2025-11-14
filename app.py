@@ -26,7 +26,6 @@ if 'audit_results' not in st.session_state:
 if 'download_files' not in st.session_state:
     st.session_state.download_files = {}
 
-
 home_page = st.Page("pages/home.py", title="Home", default=True)
 aplica_procedimento_page = st.Page('pages/aplica_procedimentos.py', title="Aplica Procedimentos")
 carrega_auditoria_page = st.Page('pages/carrega_auditoria.py', title="Carregar Resultado")
@@ -40,7 +39,8 @@ pg = st.navigation(
     {
         "Procedimentos": [home_page, aplica_procedimento_page, carrega_auditoria_page, visualiza_resultados_page],
         "Relatório": [gera_relatorios_individuais_page, gera_anexo_evidencias_page],
-        "Análise IA": [analise_gemini_auditados_page, analise_ia_geral_page],
+        "Análise IA": [analise_gemini_auditados_page],
+        # "Análise IA": [analise_gemini_auditados_page, analise_ia_geral_page],
     }
 )
 
