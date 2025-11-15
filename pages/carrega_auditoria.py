@@ -30,10 +30,10 @@ if arquivo_resultado:
             st.session_state.audit_completed = True
             st.session_state.files_processed = True # Marca como processado para consistência
             st.session_state.download_files = {} # Limpa arquivos de download antigos
+            st.rerun()
 
-            st.success("Resultado da auditoria carregado com sucesso!")
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar o arquivo: {e}")
 
 if st.session_state.audit_completed:
-    st.success("Auditoria carregada. Navegue para 'Visualizar Resultado' ou 'Gerar Relatórios'.")
+    st.success("Resultado da auditoria carregado com sucesso! Navegue para 'Visualizar Resultado' ou 'Gerar Relatórios'.")

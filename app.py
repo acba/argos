@@ -35,13 +35,18 @@ gera_anexo_evidencias_page = st.Page('pages/gera_anexo_evidencias.py', title="Ge
 analise_gemini_auditados_page = st.Page('pages/analise_gemini.py', title="Análise de Auditados com IA")
 analise_ia_geral_page = st.Page('pages/analise_ia_geral.py', title="Análise Geral com IA")
 
-pg = st.navigation(
-    {
-        "Procedimentos": [home_page, aplica_procedimento_page, carrega_auditoria_page, visualiza_resultados_page],
-        "Relatório": [gera_relatorios_individuais_page, gera_anexo_evidencias_page],
-        "Análise IA": [analise_gemini_auditados_page],
-        # "Análise IA": [analise_gemini_auditados_page, analise_ia_geral_page],
-    }
-)
+navigation_items = {
+    "Procedimentos": [home_page, aplica_procedimento_page, carrega_auditoria_page],
+    "Relatório": [],
+    "Análise IA": [],
+}
+
+# Adiciona páginas condicionalmente se a auditoria foi concluída
+if st.session_state.audit_completed:
+    navigation_items["Procedimentos"].append(visualiza_resultados_page)
+    navigation_items["Relatório"].extend([gera_relatorios_individuais_page, gera_anexo_evidencias_page])
+    navigation_items["Análise IA"].append(analise_gemini_auditados_page)
+
+pg = st.navigation(navigation_items)
 
 pg.run()

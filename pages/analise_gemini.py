@@ -19,7 +19,7 @@ from utils import avalia_gemini
 
 st.set_page_config(page_title="Análise de Auditados com IA", layout="wide")
 
-st.title("🤖 Análise de Auditados com IA (Gemini)")
+st.title("Análise de Auditados com IA (Gemini)")
 st.write(
     "Use o poder do Gemini para analisar documentos associados aos auditados. "
     "Forneça sua chave de API, um prompt detalhado e os arquivos de contexto para obter um resultado estruturado."
