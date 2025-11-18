@@ -161,6 +161,7 @@ if arquivo_auditados and arquivo_mapa_achados and arquivos_fontes_dados:
                         "tabela_situacoes": tabela_situacoes,
                     }
                     st.session_state.audit_completed = True
+                    st.rerun()
 
         except ValueError as e:
             st.error(f"Erro de configuração: {e}")
