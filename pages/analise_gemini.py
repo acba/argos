@@ -181,7 +181,9 @@ if st.button("Analisar com Gemini"):
                 all_results = []
 
                 results = st.session_state.audit_results
-                auditados = dict(islice(results["auditados"].items(), 2))
+                # auditados = dict(islice(results["auditados"].items(), 2))
+                auditados = results["auditados"]
+
                 st.info(f"Detectados {len(auditados)} auditados. A análise será realizada para cada um.")
 
                 # Armazena response_format e temperature no estado da sessão para uso posterior na exibição
